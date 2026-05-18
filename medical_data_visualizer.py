@@ -1,6 +1,5 @@
 import matplotlib.pyplot as plt
 import pandas as pd
-import sns
 import seaborn as sns
 from pandas.plotting import register_matplotlib_converters
 
@@ -42,22 +41,24 @@ def draw_bar_plot():
     df_bar["year"] = df_bar.index.year
     df_bar["month"] = df_bar.index.month_name()
 
-    # Agrupar por año y mes, calculando el promedio
-    df_bar = df_bar.groupby(["year", "month"])["value"].mean().unstack()
-
-    # Ordenar las columnas estrictamente de Enero a Diciembre
+    # Definir el orden estricto de los meses
     months_order = [
         "January", "February", "March", "April",
         "May", "June", "July", "August",
         "September", "October", "November", "December"
     ]
-    df_bar = df_bar[months_order]
+    
+    # CORRECCIÓN: Convertir la columna 'month' en categórica con orden antes de agrupar
+    df_bar["month"] = pd.Categorical(df_bar["month"], categories=months_order, ordered=True)
 
-    # CORRECCIÓN 1: Usar get_figure() para extraer la figura de Pandas de forma limpia
-    ax = df_bar.plot(kind="bar", figsize=(10, 8))
-    fig = ax.get_figure()
+    # Agrupar por año y mes, calculando el promedio (observed=False mantiene la estructura)
+    df_bar_pivot = df_bar.groupby(["year", "month"], observed=False)["value"].mean().unstack()
 
-    # CORRECCIÓN 2: Asignar etiquetas directo al objeto ax
+    # Dibujar el gráfico a partir del pivot ordenado
+    fig = df_bar_pivot.plot(kind="bar", figsize=(10, 8)).get_figure()
+    ax = fig.gca()
+
+    # Asignar etiquetas directo al objeto ax
     ax.set_xlabel("Years")
     ax.set_ylabel("Average Page Views")
     ax.legend(title="Months")
@@ -83,7 +84,7 @@ def draw_box_plot():
     axes[0].set_xlabel("Year")
     axes[0].set_ylabel("Page Views")
 
-    # CORRECCIÓN 3: Forzar el orden cronológico de los meses abreviados para Seaborn
+    # Forzar el orden cronológico de los meses abreviados para Seaborn
     months_short_order = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
     # Segundo gráfico: Estacionalidad mensual
