@@ -1,97 +1,85 @@
-import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
-from pandas.plotting import register_matplotlib_converters
+import matplotlib.pyplot as plt
+import numpy as np
 
-register_matplotlib_converters()
+# 1. Importar los datos médicos originales
+df = pd.read_csv('medical_examination.csv')
 
-# 1. Cargar y limpiar datos (Mantener entre los percentiles 2.5% y 97.5%)
-df = pd.read_csv(
-    "fcc-forum-pageviews.csv",
-    index_col="date",
-    parse_dates=True
-)
+# 2. Agregar la columna 'overweight' (IMC > 25)
+# Nota: La altura viene en cm, por eso se divide por 100 antes de elevar al cuadrado.
+bmi = df['weight'] / ((df['height'] / 100) ** 2)
+df['overweight'] = (bmi > 25).astype(int)
 
-df = df[
-    (df["value"] >= df["value"].quantile(0.025)) &
-    (df["value"] <= df["value"].quantile(0.975))
-]
+# 3. Normalizar los datos (0 = bueno, 1 = malo)
+df['cholesterol'] = (df['cholesterol'] > 1).astype(int)
+df['gluc'] = (df['gluc'] > 1).astype(int)
 
+# 4. Dibuja el gráfico categórico
+def draw_cat_plot():
+    # 5. Crear el DataFrame para el gráfico usando pd.melt
+    df_cat = pd.melt(
+        df, 
+        id_vars=['cardio'], 
+        value_vars=['cholesterol', 'gluc', 'smoke', 'alco', 'active', 'overweight']
+    )
 
-def draw_line_plot():
-    df_line = df.copy()
-
-    # Configurar el lienzo
-    fig, ax = plt.subplots(figsize=(16, 6))
-    ax.plot(df_line.index, df_line["value"], color="red", linewidth=1)
-
-    # Títulos y etiquetas exactas
-    ax.set_title("Daily freeCodeCamp Forum Page Views 5/2016-12/2019")
-    ax.set_xlabel("Date")
-    ax.set_ylabel("Page Views")
-
-    fig.savefig("line_plot.png")
-    return fig
-
-
-def draw_bar_plot():
-    df_bar = df.copy()
-
-    # Crear columnas de año y nombre de mes
-    df_bar["year"] = df_bar.index.year
-    df_bar["month"] = df_bar.index.month_name()
-
-    # Definir el orden estricto de los meses
-    months_order = [
-        "January", "February", "March", "April",
-        "May", "June", "July", "August",
-        "September", "October", "November", "December"
-    ]
+    # 6. Agrupar y reformatear los datos para mostrar los recuentos
+    df_cat = df_cat.groupby(['cardio', 'variable', 'value']).size().reset_index(name='total')
     
-    # CORRECCIÓN: Convertir la columna 'month' en categórica con orden antes de agrupar
-    df_bar["month"] = pd.Categorical(df_bar["month"], categories=months_order, ordered=True)
+    # 7. Crear el gráfico categórico con sns.catplot()
+    cat_plot = sns.catplot(
+        x='variable', 
+        y='total', 
+        hue='value', 
+        col='cardio', 
+        data=df_cat, 
+        kind='bar'
+    )
 
-    # Agrupar por año y mes, calculando el promedio (observed=False mantiene la estructura)
-    df_bar_pivot = df_bar.groupby(["year", "month"], observed=False)["value"].mean().unstack()
+    # 8. Obtener la figura de la salida
+    fig = cat_plot.fig
 
-    # Dibujar el gráfico a partir del pivot ordenado
-    fig = df_bar_pivot.plot(kind="bar", figsize=(10, 8)).get_figure()
-    ax = fig.gca()
-
-    # Asignar etiquetas directo al objeto ax
-    ax.set_xlabel("Years")
-    ax.set_ylabel("Average Page Views")
-    ax.legend(title="Months")
-
-    fig.savefig("bar_plot.png")
+    # 9. No modificar las siguientes dos líneas
+    fig.savefig('catplot.png')
     return fig
 
 
-def draw_box_plot():
-    df_box = df.copy()
-    df_box.reset_index(inplace=True)
+# 10. Dibuja el mapa de calor
+def draw_heat_map():
+    # 11. Limpiar los datos en df_heat según los percentiles solicitados
+    df_heat = df[
+        (df['ap_lo'] <= df['ap_hi']) &
+        (df['height'] >= df['height'].quantile(0.025)) &
+        (df['height'] <= df['height'].quantile(0.975)) &
+        (df['weight'] >= df['weight'].quantile(0.025)) &
+        (df['weight'] <= df['weight'].quantile(0.975))
+    ]
 
-    # Extraer componentes de fecha
-    df_box["year"] = df_box["date"].dt.year
-    df_box["month"] = df_box["date"].dt.strftime("%b")  # 'Jan', 'Feb', etc.
+    # 12. Calcular la matriz de correlación
+    corr = df_heat.corr()
 
-    # Configurar paneles lado a lado
-    fig, axes = plt.subplots(1, 2, figsize=(20, 6))
+    # 13. Generar una máscara para el triángulo superior
+    mask = np.triu(np.ones_like(corr, dtype=bool))
 
-    # Primer gráfico: Tendencia anual
-    sns.boxplot(x="year", y="value", data=df_box, ax=axes[0])
-    axes[0].set_title("Year-wise Box Plot (Trend)")
-    axes[0].set_xlabel("Year")
-    axes[0].set_ylabel("Page Views")
+    # 14. Configurar la figura de matplotlib
+    fig, ax = plt.subplots(figsize=(12, 12))
 
-    # Forzar el orden cronológico de los meses abreviados para Seaborn
-    months_short_order = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    # 15. Graficar la matriz utilizando sns.heatmap()
+    sns.heatmap(
+        corr, 
+        mask=mask, 
+        annot=True, 
+        fmt=".1f", 
+        cmap='coolwarm', 
+        vmax=0.3, 
+        vmin=-0.1, 
+        center=0, 
+        square=True, 
+        linewidths=.5, 
+        cbar_kws={"shrink": .5}
+    )
 
-    # Segundo gráfico: Estacionalidad mensual
-    sns.boxplot(x="month", y="value", data=df_box, ax=axes[1], order=months_short_order)
-    axes[1].set_title("Month-wise Box Plot (Seasonality)")
-    axes[1].set_xlabel("Month")
-    axes[1].set_ylabel("Page Views")
-
-    fig.savefig("box_plot.png")
+    # 16. No modificar las siguientes dos líneas
+    fig.savefig('heatmap.png')
     return fig
